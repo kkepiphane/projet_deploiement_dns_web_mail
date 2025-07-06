@@ -1,0 +1,14 @@
+$TTL 86400
+@   IN  SOA startup.tg. admin.startup.tg. (
+        2023071501  ; serial
+        3600        ; refresh
+        1800        ; retry
+        604800      ; expire
+        86400       ; minimum
+)
+
+@           IN  NS  dns.startup.tg.
+dns         IN  A   172.20.0.40
+webapp1     IN  A   172.20.0.50
+mail        IN  A   172.20.0.30
+db          IN  A   172.20.0.10

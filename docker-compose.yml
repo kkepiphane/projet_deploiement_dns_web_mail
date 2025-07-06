@@ -1,0 +1,95 @@
+version: '3.8'
+
+services:
+  # Base de données PostgreSQL
+  db:
+    build: ./db
+    env_file: .env
+    networks:
+      internal:
+        ipv4_address: 172.20.0.10
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Serveur DNS (Bind9)
+  dns:
+    image: ubuntu/bind9:latest
+    ports:
+      - "5353:53/udp"  # Port standard DNS
+      - "5353:53/tcp"
+    volumes:
+      - ./dns/config:/etc/bind
+      - ./dns/zones:/var/lib/bind
+    networks:
+      internal:
+        ipv4_address: 172.20.0.40
+    command: /usr/sbin/named -4 -f -u bind
+    restart: unless-stopped
+
+  # Application Web (Django + Nginx)
+  web:
+    build: ./web
+    command: gunicorn --bind 0.0.0.0:8000 core.wsgi
+    volumes:
+      - ./web:/app
+    networks:
+      internal:
+        ipv4_address: 172.20.0.20
+    depends_on:
+      - db
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d
+      - ./web/staticfiles:/app/staticfiles
+    depends_on:
+      - web
+    networks:
+      internal:
+        ipv4_address: 172.20.0.50
+
+  # Serveur Mail (MailHog)
+  mail:
+    image: mailhog/mailhog
+    hostname: mail.startup.tg
+    networks:
+      internal:
+        ipv4_address: 172.20.0.30
+    ports:
+      - "1025:1025"  # SMTP
+      - "8025:8025"  # Web UI
+    volumes:
+      - mailhog_data:/maildir
+
+  # Firewall (Personnalisé)
+  firewall:
+    build:
+      context: ./firewall
+      dockerfile: Dockerfile
+    networks:
+      - internal
+      - external
+    cap_add:
+      - NET_ADMIN
+    restart: unless-stopped
+
+networks:
+  internal:
+    ipam:
+      config:
+        - subnet: "172.20.0.0/24"
+  external:
+
+volumes:
+  db_data:
+  static_volume:
+  media_volume:
+  mailhog_data:

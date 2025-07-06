@@ -1,0 +1,5 @@
+zone "startup.tg" {
+    type master;
+    file "/var/lib/bind/startup.tg.zone";
+    allow-transfer { none; };
+};
