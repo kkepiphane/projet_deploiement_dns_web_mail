@@ -96,6 +96,15 @@ STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 # CSRF_COOKIE_SECURE = True
 # CSRF_TRUSTED_ORIGINS = ['https://webapp1.startup.tg'] 
 
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'mailhog'  # ou 'mail' pour Postfix
+EMAIL_PORT = 1025       # ou 25 pour Postfix
+EMAIL_HOST_USER = ''
+EMAIL_HOST_PASSWORD = ''
+EMAIL_USE_TLS = False
+EMAIL_USE_SSL = False
+DEFAULT_FROM_EMAIL = 'admin@startup.tg'
+
 CSRF_TRUSTED_ORIGINS = ['http://webapp1.startup.tg', 'http://localhost']
 
 

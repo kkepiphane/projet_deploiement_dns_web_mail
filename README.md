@@ -3,16 +3,6 @@
 ## Prérequis
 - Docker et Docker Compose installés
 
-## 1. Configuration initiale
-```bash
-cp .env.example .env
-mkdir -p nginx/ssl && openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-  -keyout nginx/ssl/startup.tg.key \
-  -out nginx/ssl/startup.tg.crt \
-  -subj "/CN=startup.tg"
-
-
----
 
 ### 4. Points Clés pour le Professeur
 1. **Certificats SSL** :

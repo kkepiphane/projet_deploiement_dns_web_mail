@@ -1,36 +1,32 @@
+# ./mail/Dockerfile
 FROM ubuntu:22.04
 
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Installer seulement Postfix (pas de SASL pour simplifier)
 RUN apt-get update && \
-    DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    apt-get install -y \
     postfix \
-    postfix-pcre \
-    opendkim \
-    opendkim-tools \
-    mailutils \
-    libsasl2-modules && \
-    rm -rf /var/lib/apt/lists/*
+    rsyslog \
+    && rm -rf /var/lib/apt/lists/*
 
-# Configuration de base
-RUN echo "mail.startup.tg" > /etc/mailname && \
-    postconf -e "myhostname = mail.startup.tg" && \
-    postconf -e "mydomain = startup.tg"
+# Configuration Postfix ultra-simple
+RUN echo "myhostname = mail.startup.tg" > /etc/postfix/main.cf && \
+    echo "mydomain = startup.tg" >> /etc/postfix/main.cf && \
+    echo "myorigin = \$mydomain" >> /etc/postfix/main.cf && \
+    echo "mydestination = \$myhostname, localhost.\$mydomain, localhost, \$mydomain" >> /etc/postfix/main.cf && \
+    echo "relayhost =" >> /etc/postfix/main.cf && \
+    echo "mynetworks = 172.20.0.0/24 127.0.0.0/8" >> /etc/postfix/main.cf && \
+    echo "inet_interfaces = all" >> /etc/postfix/main.cf && \
+    echo "inet_protocols = ipv4" >> /etc/postfix/main.cf
 
-# Créer le répertoire sasl s'il n'existe pas
-RUN mkdir -p /etc/postfix/sasl
+# Script de démarrage simple
+RUN echo '#!/bin/bash' > /start.sh && \
+    echo 'service rsyslog start' >> /start.sh && \
+    echo 'service postfix start' >> /start.sh && \
+    echo 'tail -f /var/log/mail.log' >> /start.sh && \
+    chmod +x /start.sh
 
-COPY postfix/ /etc/postfix/
+EXPOSE 25
 
-# Vérifier l'existence des fichiers avant de les modifier
-RUN if [ -f "/etc/postfix/virtual_aliases" ]; then \
-        postmap /etc/postfix/virtual_aliases && \
-        chmod 600 /etc/postfix/virtual_aliases.db; \
-    fi && \
-    if [ -f "/etc/postfix/sasl/smtpd.conf" ]; then \
-        chown root:postfix /etc/postfix/sasl/smtpd.conf && \
-        chmod 640 /etc/postfix/sasl/smtpd.conf; \
-    fi && \
-    chmod -R o-rwx /etc/postfix
-
-EXPOSE 25 587
-
-CMD ["sh", "-c", "service postfix start && tail -f /var/log/mail.log"]
+CMD ["/start.sh"]

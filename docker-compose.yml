@@ -20,7 +20,7 @@ services:
   dns:
     image: ubuntu/bind9:latest
     ports:
-      - "5353:53/udp"  # Port standard DNS
+      - "5353:53/udp"
       - "5353:53/tcp"
     volumes:
       - ./dns/config:/etc/bind
@@ -56,18 +56,39 @@ services:
       internal:
         ipv4_address: 172.20.0.50
 
-  # Serveur Mail (MailHog)
-  mail:
-    image: mailhog/mailhog
-    hostname: mail.startup.tg
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    ports:
+      - "1025:1025"  # SMTP
+      - "8025:8025"  # Interface web
     networks:
       internal:
         ipv4_address: 172.20.0.30
-    ports:
-      - "1025:1025"  # SMTP
-      - "8025:8025"  # Web UI
-    volumes:
-      - mailhog_data:/maildir
+    restart: unless-stopped
+    
+    #Production
+  # mail:
+  #   build: ./mail
+  #   hostname: mail.startup.tg
+  #   networks:
+  #     internal:
+  #       ipv4_address: 172.20.0.30
+  #   ports:
+  #     - "25:25"    # SMTP
+  #     - "587:587"  # Submission
+  #     - "465:465"  # SMTPS
+  #   volumes:
+  #     - mail_logs:/var/log/mail
+  #     - mail_data:/var/mail
+  #     # - sasl_data:/etc/sasldb2
+  #   cap_add:
+  #     - SYS_ADMIN 
+  #   environment:
+  #     - POSTFIX_MYNETWORKS=172.20.0.0/24 127.0.0.0/8
+  #     - POSTFIX_MYDOMAIN=startup.tg
+  #   restart: unless-stopped 
+
 
   # Firewall (Personnalisé)
   firewall:
@@ -93,3 +114,6 @@ volumes:
   static_volume:
   media_volume:
   mailhog_data:
+  # mail_logs:
+  # mail_data:
+  # sasl_data:
