@@ -1,0 +1,45 @@
+# Configuration Postfix - startup.tg
+# Sert les adresses contact@startup.tg et info@startup.tg (cf. virtual_aliases)
+
+smtpd_banner = $myhostname ESMTP
+biff = no
+append_dot_mydomain = no
+readme_directory = no
+compatibility_level = 3
+
+myhostname = mail.startup.tg
+mydomain = startup.tg
+myorigin = $mydomain
+inet_interfaces = all
+inet_protocols = ipv4
+
+# Le domaine startup.tg est servi localement ; virtual_alias_maps redirige
+# ensuite contact@/info@ vers une boîte système réelle.
+mydestination = $myhostname, localhost.$mydomain, localhost, $mydomain
+mynetworks = 127.0.0.0/8, 172.20.0.0/24
+mailbox_size_limit = 0
+recipient_delimiter = +
+
+alias_maps = hash:/etc/aliases
+alias_database = hash:/etc/aliases
+virtual_alias_maps = hash:/etc/postfix/virtual_aliases
+
+# N'autorise le relais que pour le réseau interne / les hôtes authentifiés :
+# empêche ce serveur de devenir un relais ouvert.
+smtpd_relay_restrictions = permit_mynetworks, permit_sasl_authenticated, reject_unauth_destination
+
+# TLS (certificat partagé avec nginx, cf. docker-compose.yml)
+smtpd_tls_cert_file = /etc/postfix/ssl/startup.tg.crt
+smtpd_tls_key_file = /etc/postfix/ssl/startup.tg.key
+smtpd_tls_security_level = may
+smtp_tls_security_level = may
+
+# Authentification SASL (Cyrus, cf. Dockerfile) pour la soumission (587) et SMTPS (465)
+smtpd_sasl_auth_enable = yes
+smtpd_sasl_security_options = noanonymous
+
+# DKIM (signature sortante via OpenDKIM, cf. Dockerfile)
+milter_protocol = 6
+milter_default_action = accept
+smtpd_milters = inet:127.0.0.1:8891
+non_smtpd_milters = inet:127.0.0.1:8891

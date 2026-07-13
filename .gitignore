@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+web/staticfiles/
+mail/logs/*.log
+.venv/
+*.db
+.claude/

@@ -97,15 +97,25 @@ STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 # CSRF_TRUSTED_ORIGINS = ['https://webapp1.startup.tg'] 
 
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = 'mailhog'  # ou 'mail' pour Postfix
-EMAIL_PORT = 1025       # ou 25 pour Postfix
+# EMAIL_HOST=mail en production (Postfix), EMAIL_HOST=mailhog pour le profil dev
+EMAIL_HOST = os.getenv('EMAIL_HOST', 'mail')
+EMAIL_PORT = int(os.getenv('EMAIL_PORT', '25'))
 EMAIL_HOST_USER = ''
 EMAIL_HOST_PASSWORD = ''
 EMAIL_USE_TLS = False
 EMAIL_USE_SSL = False
-DEFAULT_FROM_EMAIL = 'admin@startup.tg'
+DEFAULT_FROM_EMAIL = f"admin@{os.getenv('MAIL_DOMAIN', 'startup.tg')}"
 
-CSRF_TRUSTED_ORIGINS = ['http://webapp1.startup.tg', 'http://localhost']
+# Adresses de contact de l'entreprise (cf. sujet du projet)
+ADMIN_EMAIL = os.getenv('ADMIN_EMAIL', 'contact@startup.tg')
+INFO_EMAIL = os.getenv('INFO_EMAIL', 'info@startup.tg')
+
+CSRF_TRUSTED_ORIGINS = [
+    'http://webapp1.startup.tg',
+    'https://webapp1.startup.tg',
+    'http://localhost',
+    'https://localhost',
+]
 
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

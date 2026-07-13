@@ -724,22 +724,35 @@
                     </div>
                 </div>
                 <div class="contact-form">
-                    <form id="contactForm">
+                    {% if messages %}
+                        {% for message in messages %}
+                            <p style="padding:1rem;border-radius:8px;margin-bottom:1rem;{% if message.tags == 'success' %}background:#dcfce7;color:#166534;{% else %}background:#fee2e2;color:#991b1b;{% endif %}">{{ message }}</p>
+                        {% endfor %}
+                    {% endif %}
+                    <form id="contactForm" method="post" action="{% url 'home' %}#contact">
+                        {% csrf_token %}
                         <div class="form-group">
                             <label for="name">Nom complet</label>
-                            <input type="text" id="name" class="form-control" required>
+                            <input type="text" id="name" name="name" class="form-control" required>
                         </div>
                         <div class="form-group">
                             <label for="email">Adresse email</label>
-                            <input type="email" id="email" class="form-control" required>
+                            <input type="email" id="email" name="email" class="form-control" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="recipient">Destinataire</label>
+                            <select id="recipient" name="recipient" class="form-control">
+                                <option value="contact">Contact commercial (contact@startup.tg)</option>
+                                <option value="info">Renseignements (info@startup.tg)</option>
+                            </select>
                         </div>
                         <div class="form-group">
                             <label for="subject">Sujet</label>
-                            <input type="text" id="subject" class="form-control" required>
+                            <input type="text" id="subject" name="subject" class="form-control" required>
                         </div>
                         <div class="form-group">
                             <label for="message">Message</label>
-                            <textarea id="message" class="form-control" required></textarea>
+                            <textarea id="message" name="message" class="form-control" required></textarea>
                         </div>
                         <button type="submit" class="btn">Envoyer le message</button>
                     </form>
@@ -856,16 +869,6 @@
         }
         
         setInterval(rotateTestimonials, 5000);
-
-        // Form submission
-        const contactForm = document.getElementById('contactForm');
-        if (contactForm) {
-            contactForm.addEventListener('submit', function(e) {
-                e.preventDefault();
-                alert('Merci pour votre message ! Nous vous contacterons très soon.');
-                contactForm.reset();
-            });
-        }
 
         // Smooth scrolling for anchor links
         document.querySelectorAll('a[href^="#"]').forEach(anchor => {

@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # Base de données PostgreSQL
   db:
@@ -20,8 +18,8 @@ services:
   dns:
     image: ubuntu/bind9:latest
     ports:
-      - "5353:53/udp"
-      - "5353:53/tcp"
+      - "53:53/udp"
+      - "53:53/tcp"
     volumes:
       - ./dns/config:/etc/bind
       - ./dns/zones:/var/lib/bind
@@ -34,70 +32,80 @@ services:
   # Application Web (Django + Nginx)
   web:
     build: ./web
-    command: gunicorn --bind 0.0.0.0:8000 core.wsgi
+    command: sh -c "python manage.py migrate --noinput && python manage.py collectstatic --noinput && gunicorn --bind 0.0.0.0:8000 --workers 3 core.wsgi"
+    env_file: .env
     volumes:
       - ./web:/app
+      - static_volume:/app/staticfiles
     networks:
-      internal:
-        ipv4_address: 172.20.0.20
+      - internal
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+    # Pas d'IP fixe : le service doit pouvoir être répliqué (cf. `docker compose up -d --scale web=N`).
+    # nginx s'appuie sur la résolution DNS interne de Docker (nom de service "web") pour
+    # répartir la charge entre les instances.
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512M
+      restart_policy:
+        condition: on-failure
 
   nginx:
     image: nginx:alpine
     ports:
       - "80:80"
+      - "443:443"
     volumes:
       - ./nginx/conf.d:/etc/nginx/conf.d
-      - ./web/staticfiles:/app/staticfiles
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - static_volume:/app/staticfiles
     depends_on:
       - web
     networks:
       internal:
         ipv4_address: 172.20.0.50
 
-
+  # MailHog : boîte de test SMTP pour le développement (docker compose --profile dev up)
   mailhog:
     image: mailhog/mailhog:latest
+    profiles: ["dev"]
     ports:
-      - "1025:1025"  # SMTP
-      - "8025:8025"  # Interface web
+      - "8025:8025"  # Interface web de consultation
+    networks:
+      internal:
+        ipv4_address: 172.20.0.31
+    restart: unless-stopped
+
+  # Serveur mail de production (Postfix + OpenDKIM)
+  mail:
+    build: ./mail
+    hostname: mail.startup.tg
+    env_file: .env
     networks:
       internal:
         ipv4_address: 172.20.0.30
+    ports:
+      - "25:25"    # SMTP
+      - "587:587"  # Submission
+      - "465:465"  # SMTPS
+    volumes:
+      - mail_logs:/var/log
+      - mail_data:/var/mail
+      - ./nginx/ssl:/etc/postfix/ssl:ro
+    cap_add:
+      - SYS_ADMIN
     restart: unless-stopped
-    
-    #Production
-  # mail:
-  #   build: ./mail
-  #   hostname: mail.startup.tg
-  #   networks:
-  #     internal:
-  #       ipv4_address: 172.20.0.30
-  #   ports:
-  #     - "25:25"    # SMTP
-  #     - "587:587"  # Submission
-  #     - "465:465"  # SMTPS
-  #   volumes:
-  #     - mail_logs:/var/log/mail
-  #     - mail_data:/var/mail
-  #     # - sasl_data:/etc/sasldb2
-  #   cap_add:
-  #     - SYS_ADMIN 
-  #   environment:
-  #     - POSTFIX_MYNETWORKS=172.20.0.0/24 127.0.0.0/8
-  #     - POSTFIX_MYDOMAIN=startup.tg
-  #   restart: unless-stopped 
 
-
-  # Firewall (Personnalisé)
+  # Firewall (Personnalisé) - applique la politique de sécurité sur le trafic
+  # des conteneurs via la chaîne DOCKER-USER de l'hôte (nécessite un hôte Linux).
   firewall:
     build:
       context: ./firewall
       dockerfile: Dockerfile
-    networks:
-      - internal
-      - external
+    network_mode: host
     cap_add:
       - NET_ADMIN
     restart: unless-stopped
@@ -113,7 +121,5 @@ volumes:
   db_data:
   static_volume:
   media_volume:
-  mailhog_data:
-  # mail_logs:
-  # mail_data:
-  # sasl_data:
+  mail_logs:
+  mail_data:
