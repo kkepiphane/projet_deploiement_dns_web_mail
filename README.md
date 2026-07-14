@@ -14,6 +14,7 @@ corrigés, et la configuration a été alignée sur le sujet du projet. La secti
 ## Sommaire
 
 - [Démarrage rapide](#démarrage-rapide)
+- [Tester et déployer selon l'environnement](#tester-et-déployer-selon-lenvironnement)
 - [Plan d'adressage](#plan-daddressage)
 - [Architecture](#architecture)
 - [Politique de sécurité (pare-feu)](#politique-de-sécurité-pare-feu)
@@ -57,16 +58,111 @@ Dans ce cas, positionnez `EMAIL_HOST=mailhog` et `EMAIL_PORT=1025` dans `.env` a
 démarrer `web`, pour que Django envoie ses mails vers MailHog plutôt que vers Postfix
 (interface web de consultation sur http://localhost:8025).
 
-L'application est accessible sur :
-- http://webapp1.startup.tg (ou http://localhost, ou https://localhost avec le certificat
-  auto-signé fourni)
-- Ajoutez `webapp1.startup.tg` à votre fichier `hosts` local pointant vers l'IP du serveur, ou
-  interrogez le DNS du projet (`dig @<ip-serveur> webapp1.startup.tg`).
+L'application est accessible immédiatement sur http://localhost (ou https://localhost avec le
+certificat auto-signé fourni). Pour l'accéder via le vrai nom `webapp1.startup.tg`, voir
+[Tester et déployer selon l'environnement](#tester-et-déployer-selon-lenvironnement) ci-dessous.
 
 ### Arrêt
 
 ```bash
 docker compose down        # -v pour supprimer aussi les volumes (⚠️ perte des données)
+```
+
+## Tester et déployer selon l'environnement
+
+Il y a deux cas d'usage très différents, à ne pas confondre :
+
+1. **Démo locale** (ex. présentation à un enseignant, sur une seule machine) : on veut juste que
+   `http://webapp1.startup.tg` s'affiche dans un navigateur local, sans domaine réel ni serveur
+   public.
+2. **Déploiement réel** (un ingénieur reprend ce dépôt pour le mettre en ligne) : de vrais
+   utilisateurs, sur Internet, doivent pouvoir joindre `startup.tg`.
+
+Le point commun aux deux : **`docker compose up -d --build` fonctionne à l'identique sur
+Windows, macOS et Linux** (Docker s'occupe de l'abstraction). Ce qui change, c'est comment le
+nom `webapp1.startup.tg` devient joignable — ça, ça dépend de l'OS et du cas d'usage.
+
+### Cas 1 — Démo locale sur votre machine (Windows, macOS ou Linux)
+
+Sans domaine réel, la seule façon d'afficher le vrai nom dans un navigateur est de dire à votre
+machine "quand tu vois `webapp1.startup.tg`, va sur `127.0.0.1`" via le fichier hosts. C'est une
+modification **du système, pas du projet** : à faire vous-même, avec les droits administrateur.
+
+| OS | Fichier | Commande (terminal admin) |
+|---|---|---|
+| Windows | `C:\Windows\System32\drivers\etc\hosts` | Ouvrir Notepad **en administrateur** (clic droit → Exécuter en tant qu'administrateur), ajouter `127.0.0.1  webapp1.startup.tg`, enregistrer |
+| Ubuntu / Linux | `/etc/hosts` | `echo "127.0.0.1  webapp1.startup.tg" \| sudo tee -a /etc/hosts` |
+| macOS | `/etc/hosts` | `echo "127.0.0.1  webapp1.startup.tg" \| sudo tee -a /etc/hosts` puis `sudo dscacheutil -flushcache` |
+
+Ensuite, `docker compose up -d --build` puis http://webapp1.startup.tg fonctionne, avec le
+certificat TLS fourni pour https://webapp1.startup.tg (auto-signé : le navigateur affichera un
+avertissement à accepter, normal en démo).
+
+Sans toucher au fichier hosts, `http://localhost` fonctionne déjà sans rien configurer — c'est
+suffisant si le nom exact n'a pas besoin d'apparaître à l'écran pendant la présentation.
+
+### Cas 2 — Déploiement réel par un ingénieur
+
+⚠️ **Point important, à corriger avant toute mise en ligne réelle** : le fichier de zone
+[`dns/zones/startup.tg.zone`](dns/zones/startup.tg.zone) fait pointer `webapp1`, `mail` et `dns`
+vers les IP **internes** du réseau Docker (`172.20.0.x`). Ces IP ne sont routables qu'à
+l'intérieur du réseau Docker du projet — un client sur Internet ne peut pas les joindre. Pour un
+vrai déploiement, il faut remplacer ces IP par **l'IP publique du serveur** (une seule IP
+suffit : tous les ports (80/443/25/587/465/53) sont publiés sur l'hôte par
+`docker-compose.yml`, donc l'hôte fait office de point d'entrée unique) :
+
+```
+webapp1     IN  A   <IP publique du serveur>
+mail        IN  A   <IP publique du serveur>
+dns         IN  A   <IP publique du serveur>
+```
+
+Ensuite, chez le registrar du domaine (là où `startup.tg` est acheté), déléguer les
+enregistrements NS de la zone vers ce serveur DNS (ou, plus simple pour une démo publique sans
+achat de domaine réel, utiliser un sous-domaine que vous contrôlez et y créer un enregistrement
+NS/A pointant vers le serveur).
+
+Étapes pour un ingénieur qui reprend le projet :
+
+1. **Provisionner un serveur Linux** (Ubuntu Server recommandé — c'est aussi la cible pour
+   laquelle le pare-feu `DOCKER-USER` est pleinement natif, cf.
+   [Politique de sécurité](#politique-de-sécurité-pare-feu)) avec Docker Engine + Docker Compose
+   installés (`curl -fsSL https://get.docker.com | sh`).
+2. Cloner le dépôt, ajuster `dns/zones/startup.tg.zone` avec l'IP publique du serveur (voir
+   ci-dessus).
+3. Remplacer le certificat auto-signé dans `nginx/ssl/` (et `mail/postfix/` pour Postfix) par un
+   vrai certificat (Let's Encrypt via `certbot`, par exemple).
+4. Ouvrir les ports nécessaires sur le pare-feu du fournisseur cloud (sécurité groupe AWS,
+   pare-feu OVH/Scaleway, etc.) : 80, 443, 25, 587, 465, 53/tcp+udp — en plus du pare-feu
+   applicatif du projet (`firewall`), qui filtre le trafic *entre conteneurs*.
+5. `docker compose up -d --build`.
+6. Chez le registrar, déléguer `startup.tg` (ou le sous-domaine choisi) vers ce serveur.
+
+### Ubuntu (Linux natif) — recommandé pour tester le pare-feu réellement
+
+C'est la seule configuration où `network_mode: host` du service `firewall` s'applique
+directement au système d'exploitation (pas de VM intermédiaire) :
+
+```bash
+sudo apt update && sudo apt install -y docker.io docker-compose-plugin
+sudo systemctl enable --now docker
+git clone <ce-dépôt> && cd projet_deploiement_dns_web_mail
+docker compose up -d --build
+sudo iptables -L DOCKER-USER -n -v      # vérifie que les règles sont bien appliquées à l'hôte
+```
+
+### macOS
+
+Docker Desktop pour Mac tourne dans une VM Linux (comme sur Windows) : le pare-feu s'applique
+bien à l'intérieur de cette VM, mais pas directement sur macOS lui-même — même limite que
+Windows, voir [Limites connues](#limites-connues). Pour le reste (site web, mail, DNS), tout
+fonctionne à l'identique :
+
+```bash
+brew install --cask docker      # ou installer Docker Desktop manuellement
+open -a Docker                  # démarrer Docker Desktop
+git clone <ce-dépôt> && cd projet_deploiement_dns_web_mail
+docker compose up -d --build
 ```
 
 ## Plan d'adressage
@@ -238,63 +334,6 @@ lancées simultanément sur une base vide pourraient exécuter `migrate` en conc
 | Plan d'adressage | ✅ (voir ci-dessus) |
 | Topologie réseau (Dia, export PNG) | 📋 À produire séparément à partir du schéma de ce README |
 | Considérations budget/équipe/sécurité | ✅ voir [Aspects budget / équipe](#aspects-budget--équipe) |
-
-## Ce qui a été corrigé
-
-L'audit a démarré, testé et volontairement fait échouer chaque service pour vérifier ce qui
-fonctionnait réellement. Bugs bloquants trouvés et corrigés :
-
-- **`web` n'avait pas `env_file: .env`** dans `docker-compose.yml` → Django ne pouvait jamais
-  s'authentifier auprès de PostgreSQL (`fe_sendauth: no password supplied`).
-- **Aucune migration Django n'existait** pour le modèle `Contact` → même en corrigeant la
-  connexion, la table n'existait pas. `db/init.sql` créait une table `users` sans rapport,
-  jamais utilisée par l'application.
-- **`settings.ADMIN_EMAIL` n'était pas défini** alors que `views.py` s'y référait → toute
-  soumission du formulaire de contact levait une `AttributeError`.
-- **`views.contact()` rendait `app/contact.html`**, un template qui n'existe pas (le vrai
-  fichier est `contact/contact.html`) → `/contact/` renvoyait une 500 depuis toujours,
-  indépendamment de tout le reste.
-- **Le formulaire de contact de la page d'accueil était purement côté client** (`preventDefault`
-  + `alert()`), il ne postait jamais vers Django ; et `/contact/` n'avait **aucun `<form>`** du
-  tout. Les deux surfaces de contact ont été reliées au backend.
-- **`firewall-rules.sh` était encodé en CRLF** (fins de ligne Windows) → le shebang cassait dans
-  le conteneur Alpine (`exec: no such file or directory`) → le conteneur redémarrait en boucle
-  → **aucune règle de pare-feu n'était jamais appliquée**. Corrigé (LF + `.gitattributes` pour
-  empêcher la régression), et le script a été réécrit pour cibler `DOCKER-USER` (voir
-  [Politique de sécurité](#politique-de-sécurité-pare-feu)), car même corrigé, l'ancien script ne
-  filtrait que le trafic du conteneur `firewall` lui-même, pas celui des autres services.
-- **Le vrai Dockerfile Postfix/SASL/OpenDKIM (avec 587/465) se trouvait par erreur dans
-  `dns/Dockerfile`** — un fichier que le service `dns` n'utilise même pas (il tourne sur l'image
-  `ubuntu/bind9` toute faite). `mail/Dockerfile` ne contenait qu'une ébauche minimale (port 25
-  seul, sans SASL ni DKIM). Le service `mail` était en plus commenté dans `docker-compose.yml`,
-  remplacé par MailHog (outil de test, pas un vrai serveur de messagerie). Le Dockerfile complet
-  a été déplacé au bon endroit, son script de démarrage corrigé (il utilisait `service rsyslog
-  start` / `service saslauthd start`, deux commandes qui échouaient systématiquement dans ce
-  conteneur minimal sans init system), et les fichiers de configuration Postfix manquants
-  (`main.cf`, `master.cf`, `virtual_aliases` pour `contact@`/`info@`, `opendkim.conf`) ont été
-  créés. Testé de bout en bout : réception SMTP, alias virtuel, livraison en boîte locale.
-- **`nginx/conf.d/default.conf` pointait vers l'IP fixe `172.20.0.20`** au lieu du nom de
-  service `web` → cassait dès que l'IP changeait, et rendait toute réplication de `web`
-  impossible (deux conteneurs ne peuvent pas partager la même IP fixe). Passé à la résolution
-  DNS interne de Docker (`server web:8000`), ce qui permet en plus la répartition de charge
-  entre répliques.
-- **`web` avait une IP fixe (`ipv4_address`)**, incompatible avec `--scale` : supprimée.
-- **Bind mount `./web:/app` masquait les fichiers statiques collectés au build** (le dossier
-  hôte `web/staticfiles` était vide, et nginx pointait dessus) → CSS admin et fichiers statiques
-  jamais servis. Remplacé par un volume nommé partagé (`static_volume`), régénéré au démarrage
-  du conteneur.
-- **Le port DNS était publié sur `5353` au lieu de `53`** → ne satisfaisait pas l'exigence
-  "DNS accessible depuis l'extérieur" avec les résolveurs standards.
-- **La zone DNS publiait un enregistrement A pour `db.startup.tg`** → une base censée être
-  inaccessible depuis l'extérieur voyait quand même son IP interne divulguée publiquement.
-  Supprimé.
-- **Certificats TLS présents (`nginx/ssl/`) mais jamais utilisés** → nginx n'écoutait que sur le
-  port 80 alors que le README promettait `https://`. Ajout d'un bloc serveur 443.
-- `about.html` (template vide, non routé) supprimé ; `__pycache__` retiré du suivi Git et
-  `.gitignore`/`.gitattributes` ajoutés ; `nginx.conf` à la racine (doublon mort, jamais monté
-  par `docker-compose.yml`) supprimé ; avertissement Compose `version` obsolète supprimé ;
-  `depends_on` de `web` passé en `condition: service_healthy` pour éviter une course au
-  démarrage avec PostgreSQL.
 
 ## Limites connues
 
